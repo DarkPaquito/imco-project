@@ -1,11 +1,10 @@
 import cv2
 import numpy as np
 
-# TODO Opti tout ça
-def compute_H(a, b, c, img_gray):
-    rows, cols = img_gray.shape
+def compute_entropy(a, b, c, img_l):
+    rows, cols = img_l.shape
 
-    img_gray_float = np.zeros((rows, cols), dtype=float)
+    histo = np.zeros(256, dtype=float)
 
     c_x, c_y = cols / 2.0, rows / 2.0
     d = np.sqrt(c_x ** 2 + c_y ** 2)
@@ -15,23 +14,15 @@ def compute_H(a, b, c, img_gray):
             r = np.sqrt((row - c_y) ** 2 + (col - c_x) ** 2) / d
             g = 1 + a * (r ** 2) + b * (r ** 4) + c * (r ** 6)
 
-            img_gray_float[row, col] = img_gray[row, col] * g
+            gray_float = img_l[row, col] * g
 
-    img_log = np.zeros((rows, cols), dtype=float)
+            log = 255 * (np.log(1 + gray_float) / 8)
 
-    for row in range(rows):
-        for col in range(cols):
-            img_log[row, col] = 255 * (np.log(1 + img_gray_float[row, col]) / 8)
+            k_d = int(np.floor(log))
+            k_u = int(np.ceil(log))
 
-    histo = np.zeros(256, dtype=float)
-
-    for row in range(rows):
-        for col in range(cols):
-            k_d = int(np.floor(img_log[row, col]))
-            k_u = int(np.ceil(img_log[row, col]))
-
-            histo[k_d] += (1 + k_d - img_log[row, col])
-            histo[k_u] += (k_u - img_log[row, col])
+            histo[k_d] += (1 + k_d - log)
+            histo[k_u] += (k_u - log)
 
     tmp_histo = np.zeros(264, dtype=float)
     tmp_histo[0], tmp_histo[1], tmp_histo[2], tmp_histo[3] = (
@@ -59,6 +50,9 @@ def compute_H(a, b, c, img_gray):
     return -H
 
 def check(a, b, c):
+    if a == 0 and b == 0 and c == 0:
+        return False
+
     if a > 0 and b == 0 and c == 0:
         return True
 
@@ -91,20 +85,21 @@ def check(a, b, c):
 
 
 def vignetting_correction(img):
-    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    img_HSL = cv2.cvtColor(img, cv2.COLOR_BGR2HLS)
+    img_l = img_HSL[:, :, 1]
 
     a, b, c = 0., 0., 0.
     a_min, b_min, c_min = 0., 0., 0.
-    delta = 8
+    delta = 8.0
 
-    H_min = compute_H(a, b, c, img_gray)
+    H_min = compute_entropy(a, b, c, img_l)
 
     while delta > (1 / 256):
-        print("Coucou")
-        a_tmp = a + delta
+        print("delta:", delta)
 
+        a_tmp = a + delta
         if check(a_tmp, b, c):
-            H = compute_H(a_tmp, b, c, img_gray)
+            H = compute_entropy(a_tmp, b, c, img_l)
 
             if H_min > H:
                 a_min = a_tmp
@@ -114,9 +109,8 @@ def vignetting_correction(img):
                 H_min = H
 
         a_tmp = a - delta
-
         if check(a_tmp, b, c):
-            H = compute_H(a_tmp, b, c, img_gray)
+            H = compute_entropy(a_tmp, b, c, img_l)
 
             if H_min > H:
                 a_min = a_tmp
@@ -125,10 +119,20 @@ def vignetting_correction(img):
 
                 H_min = H
 
-        b_tmp = b - delta
-
+        b_tmp = b + delta
         if check(a, b_tmp, c):
-            H = compute_H(a, b_tmp, c, img_gray)
+            H = compute_entropy(a, b_tmp, c, img_l)
+
+            if H_min > H:
+                a_min = a
+                b_min = b_tmp
+                c_min = c
+
+                H_min = H
+
+        b_tmp = b - delta
+        if check(a, b_tmp, c):
+            H = compute_entropy(a, b_tmp, c, img_l)
 
             if H_min > H:
                 a_min = a
@@ -138,9 +142,8 @@ def vignetting_correction(img):
                 H_min = H
 
         c_tmp = c + delta
-
         if check(a, b, c_tmp):
-            H = compute_H(a, b, c_tmp, img_gray)
+            H = compute_entropy(a, b, c_tmp, img_l)
 
             if H_min > H:
                 a_min = a
@@ -150,9 +153,8 @@ def vignetting_correction(img):
                 H_min = H
 
         c_tmp = c - delta
-
         if check(a, b, c_tmp):
-            H = compute_H(a, b, c_tmp, img_gray)
+            H = compute_entropy(a, b, c_tmp, img_l)
 
             if H_min > H:
                 a_min = a
@@ -165,8 +167,7 @@ def vignetting_correction(img):
 
     print(a_min, b_min, c_min)
 
-    img_result = np.zeros(img_gray.shape, dtype=int)
-    rows, cols = img_gray.shape
+    rows, cols = img_l.shape
 
     c_x, c_y = cols / 2.0, rows / 2.0
     d = np.sqrt(c_x ** 2 + c_y ** 2)
@@ -176,17 +177,13 @@ def vignetting_correction(img):
             r = np.sqrt((row - c_y) ** 2 + (col - c_x) ** 2) / d
             g = 1 + a_min * (r ** 2) + b_min * (r ** 4) + c_min * (r ** 6)
 
-            img_result[row, col] = img_gray[row, col] * g
-            if img_result[row, col] > 255:
-                img_result[row, col] = 255
-            if img_result[row, col] < 0:
-                img_result[row, col] = 0
+            img_HSL[row, col, 1] = np.clip(img_HSL[row, col, 1] * g, 0, 255)
 
-    return img_result
+    return cv2.cvtColor(img_HSL, cv2.COLOR_HLS2BGR)
 
 if __name__ == '__main__':
-    img = cv2.imread("test_vignetting_2.jpg")
+    img = cv2.imread("image_test/test_vignetting_2.jpg")
 
     img_result = vignetting_correction(img)
 
-    cv2.imwrite("image_processed.jpg", img_result)
+    cv2.imwrite("image_test/image_processed_2_HSL.jpg", img_result)

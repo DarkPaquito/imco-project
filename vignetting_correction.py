@@ -83,7 +83,6 @@ def check(a, b, c):
         return True
     return False
 
-
 def vignetting_correction(img):
     img_HSL = cv2.cvtColor(img, cv2.COLOR_BGR2HLS)
     img_l = img_HSL[:, :, 1]
@@ -182,8 +181,8 @@ def vignetting_correction(img):
     return cv2.cvtColor(img_HSL, cv2.COLOR_HLS2BGR)
 
 if __name__ == '__main__':
-    img = cv2.imread("image_test/test_vignetting_2.jpg")
+    img = cv2.imread("vignetting_data/test_vignetting_2.jpg")
 
     img_result = vignetting_correction(img)
 
-    cv2.imwrite("image_test/image_processed_2_HSL.jpg", img_result)
+    cv2.imwrite("vignetting_data/image_processed_2_HSL.jpg", img_result)

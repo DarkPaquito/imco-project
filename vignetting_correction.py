@@ -181,8 +181,11 @@ def vignetting_correction(img):
     return cv2.cvtColor(img_HSL, cv2.COLOR_HLS2BGR)
 
 if __name__ == '__main__':
+    # Load image
     img = cv2.imread("vignetting_data/test_vignetting_2.jpg")
 
+    # Apply vignetting correction
     img_result = vignetting_correction(img)
 
+    # Save resulting images
     cv2.imwrite("vignetting_data/image_processed_2_HSL.jpg", img_result)
